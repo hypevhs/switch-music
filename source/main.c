@@ -48,8 +48,7 @@ int main() {
     printf("Press A to toggle pause.\n");
 
     // Main loop
-    while (appletMainLoop())
-    {
+    while (appletMainLoop()) {
         gfxSwapBuffers();
         hidScanInput();
 
