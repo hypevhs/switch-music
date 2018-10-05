@@ -5,7 +5,13 @@ int main() {
     gfxInitDefault();
     consoleInit(NULL);
 
-    printf("Simple libmikmod demonstration program\n");
+    printf("Simple libmikmod and game-music-emu demonstration program\n");
+
+    // Load game music file
+    size_t gme_mempool_size = (gamemus_bin_size + 0xFFF) &~ 0xFFF;
+    void* gme_mempool_ptr = memalign(0x1000, gme_mempool_size);
+    memcpy(gme_mempool_ptr, gamemus_bin, gamemus_bin_size);
+    armDCacheFlush(gme_mempool_ptr, gme_mempool_size);
 
     // Load module file
     size_t mod_mempool_size = (module_bin_size + 0xFFF) &~ 0xFFF;
@@ -18,6 +24,21 @@ int main() {
     mikModPlay(module);
     Player_TogglePause();
 
+    // Init/start GME
+    Music_Emu* emu;
+    handle_error(gme_open_data(gme_mempool_ptr, gme_mempool_size, &emu, 48000));
+    gme_start_track(emu, 0);
+    s16 samps[48000];
+    handle_error(gme_play(emu, 48000, samps));
+    AudioOutBuffer omfg;
+    u32 data_size = (48000 * 2 * 2);
+    u32 buffer_size = (data_size + 0xfff) & ~0xfff;
+    omfg.buffer = memalign(0x1000, buffer_size);
+    omfg.data_size = data_size;
+    omfg.next = NULL;
+    omfg.data_offset = 0;
+    memcpy(omfg.buffer, samps, sizeof(samps));
+    audoutAppendAudioOutBuffer(&omfg);
 
     // Main loop
     while (appletMainLoop()) {
@@ -43,6 +64,7 @@ int main() {
 
     Player_Stop();
     Player_Free(module);
+    gme_delete(emu);
 
     gfxExit();
     return 0;
