@@ -1,10 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <malloc.h>
-#include <switch.h>
-#include <mikmod.h>
-#include "module_bin.h"
+#include "main.h"
+#include "main.h"
 
 int main() {
     gfxInitDefault();
@@ -18,34 +13,11 @@ int main() {
     memcpy(mod_mempool_ptr, module_bin, module_bin_size);
     armDCacheFlush(mod_mempool_ptr, mod_mempool_size);
 
-    // Initialize MikMod
-    MikMod_RegisterDriver(&drv_switch);
-    MikMod_RegisterAllLoaders();
-    md_mode |= DMODE_SOFT_MUSIC | DMODE_NOISEREDUCTION;
-    if (MikMod_Init("")) {
-        printf("Could not initialize sound, reason: %s\n",
-                MikMod_strerror(MikMod_errno));
-    } else {
-        printf("MikMod initialized.\n");
-    }
-    char* drivers = MikMod_InfoDriver();
-    printf("Drivers installed:\n%s\n", drivers);
+    // Init/start MikMod
+    MODULE* module = mikModInit(mod_mempool_ptr, mod_mempool_size);
+    mikModPlay(module);
+    Player_TogglePause();
 
-    // Load module
-    MODULE* module = Player_LoadMem(mod_mempool_ptr, mod_mempool_size, 32, 0);
-    if (module) {
-        printf("MikMod module loaded.\n");
-        module->wrap = true;
-    } else {
-        printf("Couldn't load module, reason: %s\n",
-                MikMod_strerror(MikMod_errno));
-    }
-
-    // Start playing
-    printf("Playing %s (%s, %d chn)\n", module->songname, module->modtype,
-        module->numchn);
-    Player_Start(module);
-    printf("Press A to toggle pause.\n");
 
     // Main loop
     while (appletMainLoop()) {
@@ -74,4 +46,44 @@ int main() {
 
     gfxExit();
     return 0;
+}
+
+MODULE* mikModInit(void* mod_mempool_ptr, size_t mod_mempool_size) {
+    // Initialize MikMod
+    MikMod_RegisterDriver(&drv_switch);
+    MikMod_RegisterAllLoaders();
+    md_mode |= DMODE_SOFT_MUSIC | DMODE_NOISEREDUCTION;
+    if (MikMod_Init("")) {
+        printf("Could not initialize sound, reason: %s\n",
+                MikMod_strerror(MikMod_errno));
+    } else {
+        printf("MikMod initialized.\n");
+    }
+    char* drivers = MikMod_InfoDriver();
+    printf("Drivers installed:\n%s\n", drivers);
+
+    // Load module
+    MODULE* module = Player_LoadMem(mod_mempool_ptr, mod_mempool_size, 32, 0);
+    if (module) {
+        printf("MikMod module loaded.\n");
+        module->wrap = true;
+    } else {
+        printf("Couldn't load module, reason: %s\n",
+                MikMod_strerror(MikMod_errno));
+    }
+    return module;
+}
+
+void mikModPlay(MODULE* module) {
+    // Start playing
+    printf("Playing %s (%s, %d chn)\n", module->songname, module->modtype,
+        module->numchn);
+    Player_Start(module);
+    printf("Press A to toggle pause.\n");
+}
+
+void handle_error(const char* str) {
+	if (str) {
+		printf("Error: %s\n", str);
+	}
 }
