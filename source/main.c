@@ -24,6 +24,11 @@ int main() {
     memcpy(gme_mempool_ptr, gamemus_bin, gamemus_bin_size);
     armDCacheFlush(gme_mempool_ptr, gme_mempool_size);
 
+    size_t gme2_mempool_size = (gamemus2_bin_size + 0xFFF) &~ 0xFFF;
+    void* gme2_mempool_ptr = memalign(0x1000, gme2_mempool_size);
+    memcpy(gme2_mempool_ptr, gamemus2_bin, gamemus2_bin_size);
+    armDCacheFlush(gme2_mempool_ptr, gme2_mempool_size);
+
     // Init audout
     audoutInitialize();
     audoutStartAudioOut();
@@ -41,6 +46,10 @@ int main() {
     handle_error(gme_open_data(gme_mempool_ptr, gme_mempool_size, &emu, 48000));
     gme_start_track(emu, 0);
 
+    Music_Emu* emu2;
+    handle_error(gme_open_data(gme2_mempool_ptr, gme2_mempool_size, &emu2, 48000));
+    gme_start_track(emu2, 3);
+
     // Main loop
     while (appletMainLoop()) {
         gfxSwapBuffers();
@@ -51,7 +60,7 @@ int main() {
         if (kDown & KEY_PLUS)
             break;
 
-        update_audio(emu);
+        update_audio(emu, emu2);
 
         gfxFlushBuffers();
     }
@@ -68,7 +77,7 @@ int main() {
     return 0;
 }
 
-void update_audio(Music_Emu* emu) {
+void update_audio(Music_Emu* emu, Music_Emu* emu2) {
     /* on an average frame, toBeLoaded = 0 at this point. but if there are no audio buffers added to the system's queue
      * yet, specifically when the program just started, we prevent overwriting this initial value of 2 (or whatever)
      * and instead just spend this time loading up all (2) of the buffers
@@ -78,7 +87,16 @@ void update_audio(Music_Emu* emu) {
         audoutGetReleasedAudioOutBuffer(&unused, &toBeLoaded);
     }
     while (toBeLoaded > 0) {
-        handle_error(gme_play(emu, SAMPLES_PER_MULTICHANNEL_CHUNK, soundBuffer[currentBuffer].buffer));
+        static s16 workingBufferA[SAMPLES_PER_MULTICHANNEL_CHUNK];
+        static s16 workingBufferB[SAMPLES_PER_MULTICHANNEL_CHUNK];
+        memset(workingBufferA, 0, AUDOUT_DATA_SIZE);
+        memset(workingBufferB, 0, AUDOUT_DATA_SIZE);
+        handle_error(gme_play(emu, SAMPLES_PER_MULTICHANNEL_CHUNK, workingBufferA));
+        handle_error(gme_play(emu2, SAMPLES_PER_MULTICHANNEL_CHUNK, workingBufferB));
+        for (long idx = 0; idx < SAMPLES_PER_MULTICHANNEL_CHUNK; idx++) {
+            s16* writeToMe = soundBuffer[currentBuffer].buffer;
+            writeToMe[idx] = workingBufferA[idx] + workingBufferB[idx];
+        }
         audoutAppendAudioOutBuffer(&soundBuffer[currentBuffer]);
         currentBuffer = (currentBuffer + 1) % BUFFER_COUNT;
         toBeLoaded--;
