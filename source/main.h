@@ -9,6 +9,7 @@
 #include <gme/gme.h>
 #include "gamemus_bin.h"
 
+void update_audio(Music_Emu* emu);
 void handle_error(const char* str);
 
 #endif /* SWITCHMUSIC_H */
