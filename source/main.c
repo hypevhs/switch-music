@@ -3,7 +3,7 @@
 #define SAMPLE_RATE 48000
 #define BUFFER_COUNT 2
 #define CHANNEL_COUNT 2
-#define SAMPLES_PER_MONO_CHUNK SAMPLE_RATE
+#define SAMPLES_PER_MONO_CHUNK (SAMPLE_RATE / 30)
 #define SAMPLES_PER_MULTICHANNEL_CHUNK (SAMPLES_PER_MONO_CHUNK * CHANNEL_COUNT)
 #define AUDOUT_DATA_SIZE (SAMPLES_PER_MULTICHANNEL_CHUNK * sizeof(s16))
 #define AUDOUT_BUFFER_SIZE ((AUDOUT_DATA_SIZE + 0xfff) & ~0xfff)
@@ -56,11 +56,24 @@ int main() {
         hidScanInput();
 
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        u64 kHeld = hidKeysHeld(CONTROLLER_P1_AUTO);
 
         if (kDown & KEY_PLUS)
             break;
 
-        update_audio(emu, emu2);
+        static float panning = 0.0f;
+        if (kHeld & KEY_RIGHT) {
+            panning += (1/120.0f);
+        }
+        if (kHeld & KEY_LEFT) {
+            panning -= (1/120.0f);
+        }
+        if (panning > +1.0f) panning = +1.0f;
+        if (panning < -1.0f) panning = -1.0f;
+        if (kHeld & (KEY_LEFT | KEY_RIGHT)) {
+            printf("%f\n", panning);
+        }
+        update_audio(emu, emu2, panning);
 
         gfxFlushBuffers();
     }
@@ -77,7 +90,7 @@ int main() {
     return 0;
 }
 
-void update_audio(Music_Emu* emu, Music_Emu* emu2) {
+void update_audio(Music_Emu* emu, Music_Emu* emu2, float panning) {
     /* on an average frame, toBeLoaded = 0 at this point. but if there are no audio buffers added to the system's queue
      * yet, specifically when the program just started, we prevent overwriting this initial value of 2 (or whatever)
      * and instead just spend this time loading up all (2) of the buffers
@@ -93,14 +106,28 @@ void update_audio(Music_Emu* emu, Music_Emu* emu2) {
         memset(workingBufferB, 0, AUDOUT_DATA_SIZE);
         handle_error(gme_play(emu, SAMPLES_PER_MULTICHANNEL_CHUNK, workingBufferA));
         handle_error(gme_play(emu2, SAMPLES_PER_MULTICHANNEL_CHUNK, workingBufferB));
+        panning = fmaxf(-1.0f, fminf(panning, 1.0f));
+        float volumeA = 1.0f - fmaxf(0.0f, panning);
+        float volumeB = 1.0f - fmaxf(0.0f, -panning);
         for (long idx = 0; idx < SAMPLES_PER_MULTICHANNEL_CHUNK; idx++) {
             s16* writeToMe = soundBuffer[currentBuffer].buffer;
-            writeToMe[idx] = workingBufferA[idx] + workingBufferB[idx];
+            s16 trackA = (s16)(workingBufferA[idx] * volumeA);
+            s16 trackB = (s16)(workingBufferB[idx] * volumeB);
+            writeToMe[idx] = safe_add(trackA, trackB);
         }
         audoutAppendAudioOutBuffer(&soundBuffer[currentBuffer]);
         currentBuffer = (currentBuffer + 1) % BUFFER_COUNT;
         toBeLoaded--;
     }
+}
+
+s16 safe_add(s16 a, s16 b) {
+    if (a > 0 && b > SHRT_MAX - a) {
+        return SHRT_MAX;
+    } else if (a < 0 && b < SHRT_MIN - a) {
+        return SHRT_MIN;
+    }
+    return a + b;
 }
 
 void handle_error(const char* str) {
