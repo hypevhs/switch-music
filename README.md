@@ -10,4 +10,8 @@ Music player for the Nintendo Switch using libmikmod
 
 ## Game-Music-Emu
 
-See the `gme` branch for a game-music-emu demo (requires a switch port of that lib)
+See the `gme` branch for a game-music-emu demo (requires a switch port of that lib. I have a WIP one at the repo `libjared/game-music-emu`)
+
+## Deprecated stuff
+
+libnx got rid of the `gfx*` functions, so this doesn't compile on recent versions of libnx, you have to install an older version
